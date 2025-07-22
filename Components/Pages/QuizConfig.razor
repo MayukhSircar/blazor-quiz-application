@@ -1,0 +1,193 @@
+﻿@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using CSharpQuizBlazor.Models
+@page "/quiz-config"
+
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>Quiz Configuration</PageTitle>
+
+<div style="max-width: 800px; margin: 0 auto; padding: 20px; font-family: 'Segoe UI', system-ui, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh;">
+    <div style="background: white; border-radius: 20px; box-shadow: 0 15px 40px rgba(0,0,0,0.1); padding: 50px; margin: 40px 0;">
+
+        <!-- Simple Header -->
+        <h1 style="color: #2c3e50; margin-bottom: 30px; text-align: center; font-size: 2.5rem;">🎯 Configure Your C# Quiz</h1>
+
+        <!-- Quiz Title -->
+        <div style="margin-bottom: 30px;">
+            <label style="display: block; font-weight: 600; margin-bottom: 10px; color: #2c3e50; font-size: 1.1rem;">📝 Quiz Title:</label>
+            <input @bind="quizSettings.QuizTitle"
+                   style="width: 100%; padding: 15px; border: 2px solid #e9ecef; border-radius: 10px; font-size: 1.1rem;"
+                   placeholder="Enter quiz title" />
+        </div>
+
+        <!-- Number of Questions -->
+        <div style="margin-bottom: 30px;">
+            <label style="display: block; font-weight: 600; margin-bottom: 10px; color: #2c3e50; font-size: 1.1rem;">📊 Number of Questions:</label>
+            <select @bind="quizSettings.NumberOfQuestions"
+                    style="width: 100%; padding: 15px; border: 2px solid #e9ecef; border-radius: 10px; font-size: 1.1rem;">
+                <option value="5">5 Questions</option>
+                <option value="10">10 Questions</option>
+                <option value="15">15 Questions</option>
+                <option value="20">20 Questions</option>
+                <option value="25">25 Questions</option>
+            </select>
+        </div>
+
+        <!-- Time Limit -->
+        <div style="margin-bottom: 30px;">
+            <label style="display: block; font-weight: 600; margin-bottom: 10px; color: #2c3e50; font-size: 1.1rem;">⏰ Time Limit:</label>
+            <select @bind="quizSettings.TimeLimit"
+                    style="width: 100%; padding: 15px; border: 2px solid #e9ecef; border-radius: 10px; font-size: 1.1rem;">
+                <option value="10">10 Minutes</option>
+                <option value="15">15 Minutes</option>
+                <option value="20">20 Minutes</option>
+                <option value="30">30 Minutes</option>
+                <option value="45">45 Minutes</option>
+                <option value="60">60 Minutes</option>
+            </select>
+        </div>
+
+        <!-- NEW: Question Types Selection -->
+        <div style="margin-bottom: 40px;">
+            <label style="display: block; font-weight: 600; margin-bottom: 15px; color: #2c3e50; font-size: 1.1rem;">🎲 Select Question Types:</label>
+
+            <!-- Multiple Choice -->
+            <div style="display: flex; align-items: center; padding: 20px; border: 2px solid @(quizSettings.AllowedTypes.Contains(QuestionType.MultipleChoice) ? "#3498db" : "#e9ecef"); border-radius: 12px; background: @(quizSettings.AllowedTypes.Contains(QuestionType.MultipleChoice) ? "#e7f3ff" : "#f8f9fa"); margin-bottom: 15px; cursor: pointer; transition: all 0.3s ease;" @onclick="() => ToggleQuestionType(QuestionType.MultipleChoice)">
+                <input type="checkbox"
+                       checked="@quizSettings.AllowedTypes.Contains(QuestionType.MultipleChoice)"
+                       style="margin-right: 15px; transform: scale(1.5);" />
+                <div>
+                    <h4 style="margin: 0 0 5px 0; color: #2c3e50;">📋 Multiple Choice Questions</h4>
+                    <p style="margin: 0; color: #7f8c8d; font-size: 0.9rem;">Choose from 4 options - Traditional quiz format</p>
+                </div>
+            </div>
+
+            <!-- True/False -->
+            <div style="display: flex; align-items: center; padding: 20px; border: 2px solid @(quizSettings.AllowedTypes.Contains(QuestionType.TrueFalse) ? "#2ecc71" : "#e9ecef"); border-radius: 12px; background: @(quizSettings.AllowedTypes.Contains(QuestionType.TrueFalse) ? "#e8f8f5" : "#f8f9fa"); margin-bottom: 15px; cursor: pointer; transition: all 0.3s ease;" @onclick="() => ToggleQuestionType(QuestionType.TrueFalse)">
+                <input type="checkbox"
+                       checked="@quizSettings.AllowedTypes.Contains(QuestionType.TrueFalse)"
+                       style="margin-right: 15px; transform: scale(1.5);" />
+                <div>
+                    <h4 style="margin: 0 0 5px 0; color: #2c3e50;">✅ True/False Questions</h4>
+                    <p style="margin: 0; color: #7f8c8d; font-size: 0.9rem;">Simple true or false statements - Quick and decisive</p>
+                </div>
+            </div>
+
+            <!-- One Word -->
+            <div style="display: flex; align-items: center; padding: 20px; border: 2px solid @(quizSettings.AllowedTypes.Contains(QuestionType.OneWord) ? "#f39c12" : "#e9ecef"); border-radius: 12px; background: @(quizSettings.AllowedTypes.Contains(QuestionType.OneWord) ? "#fef9e7" : "#f8f9fa"); margin-bottom: 15px; cursor: pointer; transition: all 0.3s ease;" @onclick="() => ToggleQuestionType(QuestionType.OneWord)">
+                <input type="checkbox"
+                       checked="@quizSettings.AllowedTypes.Contains(QuestionType.OneWord)"
+                       style="margin-right: 15px; transform: scale(1.5);" />
+                <div>
+                    <h4 style="margin: 0 0 5px 0; color: #2c3e50;">💭 One Word Answers</h4>
+                    <p style="margin: 0; color: #7f8c8d; font-size: 0.9rem;">Type single word answers - Test specific knowledge</p>
+                </div>
+            </div>
+
+            <!-- Short Answer -->
+            <div style="display: flex; align-items: center; padding: 20px; border: 2px solid @(quizSettings.AllowedTypes.Contains(QuestionType.ShortAnswer) ? "#e74c3c" : "#e9ecef"); border-radius: 12px; background: @(quizSettings.AllowedTypes.Contains(QuestionType.ShortAnswer) ? "#fdf2f2" : "#f8f9fa"); margin-bottom: 15px; cursor: pointer; transition: all 0.3s ease;" @onclick="() => ToggleQuestionType(QuestionType.ShortAnswer)">
+                <input type="checkbox"
+                       checked="@quizSettings.AllowedTypes.Contains(QuestionType.ShortAnswer)"
+                       style="margin-right: 15px; transform: scale(1.5);" />
+                <div>
+                    <h4 style="margin: 0 0 5px 0; color: #2c3e50;">📝 Short Answer Questions</h4>
+                    <p style="margin: 0; color: #7f8c8d; font-size: 0.9rem;">Write brief explanations - Demonstrate understanding</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Start Quiz Button -->
+        <div style="text-align: center; margin-top: 40px;">
+            <button @onclick="StartQuiz" disabled="@(!IsConfigValid())"
+                    style="background: @(IsConfigValid() ? "linear-gradient(135deg, #8e44ad, #9b59b6)" : "#95a5a6"); border: none; padding: 20px 50px; font-size: 1.4rem; font-weight: 700; border-radius: 50px; color: white; cursor: @(IsConfigValid() ? "pointer" : "not-allowed"); box-shadow: 0 10px 30px rgba(142, 68, 173, 0.3); transition: all 0.3s ease;">
+                🎯 Start Quiz →
+            </button>
+
+            @if (!IsConfigValid())
+            {
+                <p style="color: #e74c3c; margin-top: 15px; font-weight: 500;">⚠️ Please select at least one question type to continue</p>
+            }
+        </div>
+
+        <!-- Quiz Preview -->
+        @if (IsConfigValid())
+        {
+            <div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 10px; border-left: 4px solid #3498db;">
+                <h4 style="color: #2c3e50; margin-bottom: 10px;">📋 Quiz Preview:</h4>
+                <p style="margin: 5px 0; color: #555;"><strong>Title:</strong> @quizSettings.QuizTitle</p>
+                <p style="margin: 5px 0; color: #555;"><strong>Questions:</strong> @quizSettings.NumberOfQuestions</p>
+                <p style="margin: 5px 0; color: #555;"><strong>Time Limit:</strong> @quizSettings.TimeLimit minutes</p>
+                <p style="margin: 5px 0; color: #555;"><strong>Question Types:</strong> @string.Join(", ", quizSettings.AllowedTypes.Select(GetQuestionTypeDisplayName))</p>
+            </div>
+        }
+
+        <!-- Temporary Admin Access -->
+        <div style="text-align: center; margin-top: 20px;">
+            <a href="/admin/exams" style="color: #e74c3c; text-decoration: none; font-weight: 600;">
+                🔧 Admin Access (Temporary Link)
+            </a>
+        </div>
+    </div>
+</div>
+
+@code {
+    private QuizSettings quizSettings = new QuizSettings
+    {
+        QuizTitle = "C# Programming Quiz",
+        NumberOfQuestions = 10,
+        TimeLimit = 30,
+        AllowedTypes = new List<QuestionType> { QuestionType.MultipleChoice, QuestionType.TrueFalse, QuestionType.OneWord, QuestionType.ShortAnswer } // ← ALL TYPES!
+    };
+
+    private void ToggleQuestionType(QuestionType type)
+    {
+        if (quizSettings.AllowedTypes.Contains(type))
+        {
+            quizSettings.AllowedTypes.Remove(type);
+        }
+        else
+        {
+            quizSettings.AllowedTypes.Add(type);
+        }
+        StateHasChanged();
+    }
+
+    private bool IsConfigValid()
+    {
+        return !string.IsNullOrWhiteSpace(quizSettings.QuizTitle) &&
+               quizSettings.AllowedTypes.Any() &&
+               quizSettings.NumberOfQuestions > 0;
+    }
+
+    private string GetQuestionTypeDisplayName(QuestionType type)
+    {
+        return type switch
+        {
+            QuestionType.MultipleChoice => "Multiple Choice",
+            QuestionType.TrueFalse => "True/False",
+            QuestionType.OneWord => "One Word",
+            QuestionType.ShortAnswer => "Short Answer",
+            _ => type.ToString()
+        };
+    }
+
+    private async Task StartQuiz()
+    {
+        try
+        {
+            if (!IsConfigValid()) return;
+
+            // Save settings to session storage
+            await JS.InvokeVoidAsync("sessionStorage.setItem", "quizSettings", System.Text.Json.JsonSerializer.Serialize(quizSettings));
+
+            // Navigate to quiz
+            Navigation.NavigateTo("/quiz");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in StartQuiz: {ex.Message}");
+        }
+    }
+}
+

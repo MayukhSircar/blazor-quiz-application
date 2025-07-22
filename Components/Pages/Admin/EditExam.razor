@@ -1,0 +1,516 @@
+﻿@page "/admin/editexam"
+@page "/admin/editexam/{ExamId:int}"
+@using Microsoft.EntityFrameworkCore
+@using CSharpQuizBlazor.Models
+@using CSharpQuizBlazor.Data
+@inject IDbContextFactory<QuizDbContext> DbContextFactory
+@inject NavigationManager Navigation
+
+<PageTitle>@(IsNewExam ? "Create New Exam" : "Edit Exam")</PageTitle>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 class="text-primary">@(IsNewExam ? "🎯 Create New Exam" : "✏️ Edit Exam")</h2>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="/admin/exams">Exam Manager</a></li>
+                        <li class="breadcrumb-item active">@(IsNewExam ? "Create" : "Edit")</li>
+                    </ol>
+                </nav>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Left Panel - Exam Configuration -->
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">⚙️ Exam Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Exam Title -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">📝 Exam Title</label>
+                        <input class="form-control" @bind="examTitle" @bind:event="oninput" placeholder="Enter exam title" />
+                        @if (string.IsNullOrWhiteSpace(examTitle))
+                        {
+                            <small class="text-danger">Title is required</small>
+                        }
+                    </div>
+
+                    <!-- Number of Questions -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">📊 Number of Questions</label>
+                        <select class="form-select" @bind="numberOfQuestions" @bind:event="onchange">
+                            <option value="5">5 Questions</option>
+                            <option value="10">10 Questions</option>
+                            <option value="15">15 Questions</option>
+                            <option value="20">20 Questions</option>
+                            <option value="25">25 Questions</option>
+                            <option value="30">30 Questions</option>
+                        </select>
+                        <small class="text-muted">Currently selected: @selectedQuestionIds.Count questions</small>
+                    </div>
+
+                    <!-- Time Limit -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">⏰ Time Limit</label>
+                        <select class="form-select" @bind="timeLimit">
+                            <option value="10">10 Minutes</option>
+                            <option value="15">15 Minutes</option>
+                            <option value="20">20 Minutes</option>
+                            <option value="30">30 Minutes</option>
+                            <option value="45">45 Minutes</option>
+                            <option value="60">60 Minutes</option>
+                            <option value="90">90 Minutes</option>
+                        </select>
+                    </div>
+
+                    <!-- Question Types -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">🎲 Question Types</label>
+                        <div class="border rounded p-3">
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="mcCheck"
+                                       @bind="allowMultipleChoice" />
+                                <label class="form-check-label" for="mcCheck">📋 Multiple Choice</label>
+                                <small class="text-muted d-block">@GetQuestionTypeCount(QuestionType.MultipleChoice) available</small>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="tfCheck"
+                                       @bind="allowTrueFalse" />
+                                <label class="form-check-label" for="tfCheck">✅ True/False</label>
+                                <small class="text-muted d-block">@GetQuestionTypeCount(QuestionType.TrueFalse) available</small>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="owCheck"
+                                       @bind="allowOneWord" />
+                                <label class="form-check-label" for="owCheck">💭 One Word</label>
+                                <small class="text-muted d-block">@GetQuestionTypeCount(QuestionType.OneWord) available</small>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="saCheck"
+                                       @bind="allowShortAnswer" />
+                                <label class="form-check-label" for="saCheck">📝 Short Answer</label>
+                                <small class="text-muted d-block">@GetQuestionTypeCount(QuestionType.ShortAnswer) available</small>
+                            </div>
+                        </div>
+                        <small class="text-muted">Total available questions: @filteredQuestions.Count</small>
+                    </div>
+
+                    <!-- Debug Info -->
+                    <div class="mb-3 p-2 bg-light border rounded">
+                        <small>
+                            <strong>Debug Info:</strong><br />
+                            Title: '@examTitle'<br />
+                            Selected: @selectedQuestionIds.Count<br />
+                            Can Save: @CanSaveExam()
+                        </small>
+                    </div>
+
+                    <!-- Quick Actions -->
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-success" @onclick="SaveExam" disabled="@(!CanSaveExam())">
+                            @(IsNewExam ? "✅ Create Exam" : "💾 Update Exam")
+                        </button>
+                        <button class="btn btn-warning" @onclick="TestAddQuestion">
+                            🧪 Test Add Question
+                        </button>
+                        <button class="btn btn-outline-secondary" @onclick="GoBack">
+                            ❌ Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel - Question Selection -->
+        <div class="col-md-8">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">📚 Question Selection & Ordering</h5>
+                </div>
+                <div class="card-body">
+                    @if (allQuestions == null || allQuestions.Count == 0)
+                    {
+                        <div class="text-center py-5">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2">Loading questions...</p>
+                        </div>
+                    }
+                    else if (filteredQuestions.Count == 0)
+                    {
+                        <div class="alert alert-warning">
+                            <h6>⚠️ No Questions Available</h6>
+                            <p>No questions match your selected criteria. Please check your question type selection.</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="row">
+                            <!-- Available Questions -->
+                            <div class="col-md-6">
+                                <h6>📋 Available Questions (@filteredQuestions.Count)</h6>
+                                <div style="max-height: 400px; overflow-y: auto;" class="border rounded p-2">
+                                    @for (int i = 0; i < filteredQuestions.Count; i++)
+                                    {
+                                        var question = filteredQuestions[i];
+                                        var isSelected = selectedQuestionIds.Contains(question.Id);
+                                        var canSelect = !isSelected && selectedQuestionIds.Count < numberOfQuestions;
+
+                                        <div class="form-check mb-2 p-2 border rounded @(isSelected ? "bg-light" : "")">
+                                            <input class="form-check-input" type="checkbox"
+                                                   id="question-@question.Id"
+                                                   checked="@isSelected"
+                                                   disabled="@(!isSelected && !canSelect)"
+                                                   @onclick="@(() => ToggleQuestion(question.Id))" />
+                                            <label class="form-check-label" for="question-@question.Id">
+                                                <strong>@question.QuestionText</strong>
+                                                <div class="mt-1">
+                                                    <span class="badge bg-secondary">@GetQuestionTypeDisplay(question.Type)</span>
+                                                    @if (!string.IsNullOrEmpty(question.Category))
+                                                    {
+                                                        <span class="badge bg-info ms-1">@question.Category</span>
+                                                    }
+                                                    <span class="badge bg-warning ms-1">@question.Points pts</span>
+                                                </div>
+                                            </label>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+
+                            <!-- Selected Questions -->
+                            <div class="col-md-6">
+                                <h6>✅ Selected Questions (@selectedQuestions.Count/@numberOfQuestions)</h6>
+                                @if (selectedQuestions.Count == 0)
+                                {
+                                    <div class="alert alert-info">
+                                        <p class="mb-0">No questions selected yet. Choose questions from the left panel.</p>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div style="max-height: 400px; overflow-y: auto;" class="border rounded p-2">
+                                        @for (int i = 0; i < selectedQuestions.Count; i++)
+                                        {
+                                            var index = i;
+                                            var question = selectedQuestions[i];
+                                            <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded">
+                                                <div class="flex-grow-1">
+                                                    <strong>@(i + 1).</strong> @question.QuestionText
+                                                    <div class="mt-1">
+                                                        <span class="badge bg-secondary">@GetQuestionTypeDisplay(question.Type)</span>
+                                                    </div>
+                                                </div>
+                                                <div class="btn-group-vertical" role="group">
+                                                    <button class="btn btn-sm btn-outline-primary"
+                                                            @onclick="() => MoveUp(index)"
+                                                            disabled="@(index == 0)" title="Move Up">
+                                                        ↑
+                                                    </button>
+                                                    <button class="btn btn-sm btn-outline-primary"
+                                                            @onclick="() => MoveDown(index)"
+                                                            disabled="@(index == selectedQuestions.Count - 1)" title="Move Down">
+                                                        ↓
+                                                    </button>
+                                                    <button class="btn btn-sm btn-outline-danger"
+                                                            @onclick="() => RemoveQuestion(question.Id)" title="Remove">
+                                                        ×
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public int? ExamId { get; set; }
+
+    // Use simple properties instead of complex object binding
+    private string examTitle = "";
+    private int numberOfQuestions = 10;
+    private int timeLimit = 30;
+
+    private List<Question> allQuestions = new List<Question>();
+    private List<Question> filteredQuestions = new List<Question>();
+    private List<int> selectedQuestionIds = new List<int>();
+    private List<Question> selectedQuestions = new List<Question>();
+    private Dictionary<QuestionType, int> questionTypeCounts = new Dictionary<QuestionType, int>();
+
+    // Question type selections
+    private bool allowMultipleChoice = true;
+    private bool allowTrueFalse = true;
+    private bool allowOneWord = true;
+    private bool allowShortAnswer = true;
+
+    private bool IsNewExam => !ExamId.HasValue;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Console.WriteLine("OnInitializedAsync starting...");
+        await LoadAllQuestions();
+        await LoadQuestionTypeCounts();
+
+        if (ExamId.HasValue)
+        {
+            await LoadExam();
+        }
+
+        FilterQuestions();
+        StateHasChanged();
+        Console.WriteLine("OnInitializedAsync completed");
+    }
+
+    private async Task LoadAllQuestions()
+    {
+        try
+        {
+            Console.WriteLine("Loading all questions...");
+            using var context = DbContextFactory.CreateDbContext();
+            allQuestions = await context.Questions
+                .Where(q => q.IsActive)
+                .OrderBy(q => q.Category)
+                .ThenBy(q => q.QuestionText)
+                .ToListAsync();
+            Console.WriteLine($"Loaded {allQuestions.Count} questions");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading questions: {ex.Message}");
+            allQuestions = new List<Question>();
+        }
+    }
+
+    private async Task LoadQuestionTypeCounts()
+    {
+        try
+        {
+            using var context = DbContextFactory.CreateDbContext();
+            questionTypeCounts = await context.Questions
+                .Where(q => q.IsActive)
+                .GroupBy(q => q.Type)
+                .ToDictionaryAsync(g => g.Key, g => g.Count());
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading question type counts: {ex.Message}");
+        }
+    }
+
+    private async Task LoadExam()
+    {
+        try
+        {
+            if (ExamId.HasValue)
+            {
+                using var context = DbContextFactory.CreateDbContext();
+                var exam = await context.Exams.FindAsync(ExamId.Value);
+                if (exam != null)
+                {
+                    examTitle = exam.Title;
+                    numberOfQuestions = exam.NumberOfQuestions;
+                    timeLimit = exam.TimeLimit;
+
+                    var examQuestions = await context.ExamQuestions
+                        .Where(eq => eq.ExamId == ExamId.Value)
+                        .OrderBy(eq => eq.OrderIndex)
+                        .ToListAsync();
+
+                    selectedQuestionIds = examQuestions.Select(eq => eq.QuestionId).ToList();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading exam: {ex.Message}");
+        }
+    }
+
+    private void FilterQuestions()
+    {
+        Console.WriteLine("Filtering questions...");
+        var allowedTypes = new List<QuestionType>();
+        if (allowMultipleChoice) allowedTypes.Add(QuestionType.MultipleChoice);
+        if (allowTrueFalse) allowedTypes.Add(QuestionType.TrueFalse);
+        if (allowOneWord) allowedTypes.Add(QuestionType.OneWord);
+        if (allowShortAnswer) allowedTypes.Add(QuestionType.ShortAnswer);
+
+        filteredQuestions = allQuestions
+            .Where(q => allowedTypes.Contains(q.Type))
+            .ToList();
+
+        Console.WriteLine($"Filtered to {filteredQuestions.Count} questions");
+        UpdateSelectedQuestions();
+    }
+
+    private void UpdateSelectedQuestions()
+    {
+        selectedQuestions = allQuestions
+            .Where(q => selectedQuestionIds.Contains(q.Id))
+            .OrderBy(q => selectedQuestionIds.IndexOf(q.Id))
+            .ToList();
+
+        Console.WriteLine($"Updated selected questions: {selectedQuestions.Count}");
+        StateHasChanged();
+    }
+
+    private void ToggleQuestion(int questionId)
+    {
+        Console.WriteLine($"ToggleQuestion called for ID: {questionId}");
+
+        if (selectedQuestionIds.Contains(questionId))
+        {
+            selectedQuestionIds.Remove(questionId);
+            Console.WriteLine($"Removed question {questionId}");
+        }
+        else if (selectedQuestionIds.Count < numberOfQuestions)
+        {
+            selectedQuestionIds.Add(questionId);
+            Console.WriteLine($"Added question {questionId}");
+        }
+
+        Console.WriteLine($"Total selected: {selectedQuestionIds.Count}");
+        UpdateSelectedQuestions();
+    }
+
+    private void TestAddQuestion()
+    {
+        if (filteredQuestions.Any())
+        {
+            var firstQuestion = filteredQuestions.First();
+            if (!selectedQuestionIds.Contains(firstQuestion.Id) && selectedQuestionIds.Count < numberOfQuestions)
+            {
+                selectedQuestionIds.Add(firstQuestion.Id);
+                UpdateSelectedQuestions();
+                Console.WriteLine("Test: Added first question manually");
+            }
+        }
+    }
+
+    private void RemoveQuestion(int questionId)
+    {
+        selectedQuestionIds.Remove(questionId);
+        UpdateSelectedQuestions();
+    }
+
+    private void MoveUp(int index)
+    {
+        if (index > 0)
+        {
+            var temp = selectedQuestionIds[index - 1];
+            selectedQuestionIds[index - 1] = selectedQuestionIds[index];
+            selectedQuestionIds[index] = temp;
+            UpdateSelectedQuestions();
+        }
+    }
+
+    private void MoveDown(int index)
+    {
+        if (index < selectedQuestionIds.Count - 1)
+        {
+            var temp = selectedQuestionIds[index + 1];
+            selectedQuestionIds[index + 1] = selectedQuestionIds[index];
+            selectedQuestionIds[index] = temp;
+            UpdateSelectedQuestions();
+        }
+    }
+
+    private int GetQuestionTypeCount(QuestionType type)
+    {
+        return questionTypeCounts.ContainsKey(type) ? questionTypeCounts[type] : 0;
+    }
+
+    private string GetQuestionTypeDisplay(QuestionType type)
+    {
+        return type switch
+        {
+            QuestionType.MultipleChoice => "Multiple Choice",
+            QuestionType.TrueFalse => "True/False",
+            QuestionType.OneWord => "One Word",
+            QuestionType.ShortAnswer => "Short Answer",
+            _ => type.ToString()
+        };
+    }
+
+    private bool CanSaveExam()
+    {
+        return !string.IsNullOrWhiteSpace(examTitle) && selectedQuestionIds.Count > 0;
+    }
+
+    private async Task SaveExam()
+    {
+        Console.WriteLine("=== SaveExam Called ===");
+        Console.WriteLine($"Title: '{examTitle}'");
+        Console.WriteLine($"Selected Questions: {selectedQuestionIds.Count}");
+        Console.WriteLine($"Can Save: {CanSaveExam()}");
+
+        if (!CanSaveExam())
+        {
+            Console.WriteLine("Cannot save - validation failed");
+            return;
+        }
+
+        try
+        {
+            using var context = DbContextFactory.CreateDbContext();
+
+            var exam = new Exam
+            {
+                Title = examTitle,
+                NumberOfQuestions = numberOfQuestions,
+                TimeLimit = timeLimit,
+                AllowedQuestionTypes = "MultipleChoice,TrueFalse,OneWord,ShortAnswer",
+                CreatedDate = DateTime.UtcNow,
+                CreatedBy = "Admin",
+                IsActive = true
+            };
+
+            if (IsNewExam)
+            {
+                context.Exams.Add(exam);
+                await context.SaveChangesAsync();
+                Console.WriteLine($"Exam created with ID: {exam.ExamId}");
+            }
+
+            // Add selected questions with their order
+            for (int i = 0; i < selectedQuestionIds.Count; i++)
+            {
+                context.ExamQuestions.Add(new ExamQuestion
+                {
+                    ExamId = exam.ExamId,
+                    QuestionId = selectedQuestionIds[i],
+                    OrderIndex = i + 1
+                });
+            }
+
+            await context.SaveChangesAsync();
+            Console.WriteLine("Exam saved successfully");
+            Navigation.NavigateTo("/admin/exams");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error saving exam: {ex.Message}");
+            Console.WriteLine($"Stack trace: {ex.StackTrace}");
+        }
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo("/admin/exams");
+    }
+}
+

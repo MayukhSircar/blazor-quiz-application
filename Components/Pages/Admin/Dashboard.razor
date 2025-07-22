@@ -1,0 +1,324 @@
+﻿@page "/admin/dashboard"
+@using Microsoft.EntityFrameworkCore
+@using CSharpQuizBlazor.Models
+@using CSharpQuizBlazor.Data
+@inject IDbContextFactory<QuizDbContext> DbContextFactory
+@inject NavigationManager Navigation
+
+<PageTitle>Admin Dashboard</PageTitle>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 class="text-primary">🏠 Admin Dashboard</h2>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="/quiz-config">Quiz Config</a></li>
+                        <li class="breadcrumb-item active">Admin Dashboard</li>
+                    </ol>
+                </nav>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="row g-4 mb-4">
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="mb-3">
+                        <span class="display-4 text-primary">❓</span>
+                    </div>
+                    <h5 class="card-title text-muted">Total Questions</h5>
+                    <h2 class="text-primary mb-0">@totalQuestions</h2>
+                    <small class="text-muted">Active questions in database</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="mb-3">
+                        <span class="display-4 text-success">📋</span>
+                    </div>
+                    <h5 class="card-title text-muted">Total Exams</h5>
+                    <h2 class="text-success mb-0">@totalExams</h2>
+                    <small class="text-muted">Created exam configurations</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="mb-3">
+                        <span class="display-4 text-warning">🎯</span>
+                    </div>
+                    <h5 class="card-title text-muted">Question Types</h5>
+                    <h2 class="text-warning mb-0">@questionTypes</h2>
+                    <small class="text-muted">Different question formats</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="mb-3">
+                        <span class="display-4 text-info">⭐</span>
+                    </div>
+                    <h5 class="card-title text-muted">Avg. Points</h5>
+                    <h2 class="text-info mb-0">@averagePoints.ToString("F1")</h2>
+                    <small class="text-muted">Average question difficulty</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">🚀 Quick Actions</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-outline-primary" @onclick="GoToExamManager">
+                            <i class="bi bi-plus-circle me-2"></i>Create New Exam
+                        </button>
+                        <button class="btn btn-outline-success" @onclick="GoToQuestionManager">
+                            <i class="bi bi-question-circle me-2"></i>Add New Question
+                        </button>
+                        <button class="btn btn-outline-info" @onclick="GoToQuizConfig">
+                            <i class="bi bi-gear me-2"></i>Configure Quiz Settings
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">📊 Question Distribution</h5>
+                </div>
+                <div class="card-body">
+                    @if (questionDistribution.Any())
+                    {
+                        @foreach (var item in questionDistribution)
+                        {
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span class="fw-medium">@GetQuestionTypeIcon(item.Key) @GetQuestionTypeName(item.Key)</span>
+                                    <span class="badge bg-primary">@item.Value</span>
+                                </div>
+                                <div class="progress" style="height: 8px;">
+                                    <div class="progress-bar" style="width: @(GetPercentage(item.Value))%"></div>
+                                </div>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <p class="text-muted text-center">No questions available</p>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">📈 System Overview</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="text-muted">Database Status</h6>
+                            <div class="alert alert-@(isDatabaseConnected ? "success" : "danger") d-flex align-items-center">
+                                <span class="me-2">@(isDatabaseConnected ? "✅" : "❌")</span>
+                                <span>Database @(isDatabaseConnected ? "Connected" : "Disconnected")</span>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="text-muted">Last Updated</h6>
+                            <p class="mb-0">@DateTime.Now.ToString("MMM dd, yyyy - HH:mm")</p>
+                        </div>
+                    </div>
+
+                    @if (recentExams.Any())
+                    {
+                        <h6 class="text-muted mt-3">Recent Exams</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Exam Title</th>
+                                        <th>Questions</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var exam in recentExams.Take(5))
+                                    {
+                                        <tr>
+                                            <td>@exam.Title</td>
+                                            <td>
+                                                <span class="badge bg-secondary">@GetExamQuestionCount(exam.ExamId)</span>
+                                            </td>
+                                            <td>
+                                                <button class="btn btn-sm btn-outline-primary" @onclick="() => EditExam(exam.ExamId)">
+                                                    Edit
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private int totalQuestions = 0;
+    private int totalExams = 0;
+    private int questionTypes = 0;
+    private double averagePoints = 0;
+    private bool isDatabaseConnected = false;
+    private Dictionary<QuestionType, int> questionDistribution = new();
+    private List<Exam> recentExams = new();
+    private Dictionary<int, int> examQuestionCounts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDashboardData();
+    }
+
+    private async Task LoadDashboardData()
+    {
+        try
+        {
+            using var context = DbContextFactory.CreateDbContext();
+
+            // Test database connection
+            isDatabaseConnected = true;
+
+            // Load total questions
+            totalQuestions = await context.Questions
+                .Where(q => q.IsActive)
+                .CountAsync();
+
+            // Load total exams
+            totalExams = await context.Exams.CountAsync();
+
+            // Load question types count
+            questionTypes = await context.Questions
+                .Where(q => q.IsActive)
+                .Select(q => q.Type)
+                .Distinct()
+                .CountAsync();
+
+            // Calculate average points
+            if (totalQuestions > 0)
+            {
+                averagePoints = await context.Questions
+                    .Where(q => q.IsActive)
+                    .AverageAsync(q => q.Points);
+            }
+
+            // Load question distribution
+            questionDistribution = await context.Questions
+                .Where(q => q.IsActive)
+                .GroupBy(q => q.Type)
+                .ToDictionaryAsync(g => g.Key, g => g.Count());
+
+            // Load recent exams
+            recentExams = await context.Exams
+                .OrderByDescending(e => e.ExamId)
+                .Take(10)
+                .ToListAsync();
+
+            // Load exam question counts
+            foreach (var exam in recentExams)
+            {
+                var count = await context.ExamQuestions
+                    .Where(eq => eq.ExamId == exam.ExamId)
+                    .CountAsync();
+                examQuestionCounts[exam.ExamId] = count;
+            }
+        }
+        catch (Exception ex)
+        {
+            isDatabaseConnected = false;
+            Console.WriteLine($"Error loading dashboard data: {ex.Message}");
+        }
+    }
+
+    private string GetQuestionTypeIcon(QuestionType type)
+    {
+        return type switch
+        {
+            QuestionType.MultipleChoice => "📋",
+            QuestionType.TrueFalse => "✅",
+            QuestionType.OneWord => "💭",
+            QuestionType.ShortAnswer => "📝",
+            _ => "❓"
+        };
+    }
+
+    private string GetQuestionTypeName(QuestionType type)
+    {
+        return type switch
+        {
+            QuestionType.MultipleChoice => "Multiple Choice",
+            QuestionType.TrueFalse => "True/False",
+            QuestionType.OneWord => "One Word",
+            QuestionType.ShortAnswer => "Short Answer",
+            _ => type.ToString()
+        };
+    }
+
+    private double GetPercentage(int count)
+    {
+        return totalQuestions > 0 ? (double)count / totalQuestions * 100 : 0;
+    }
+
+    private int GetExamQuestionCount(int examId)
+    {
+        return examQuestionCounts.ContainsKey(examId) ? examQuestionCounts[examId] : 0;
+    }
+
+    // Navigation methods
+    private void GoToExamManager()
+    {
+        Navigation.NavigateTo("/admin/exams");
+    }
+
+    private void GoToQuestionManager()
+    {
+        Navigation.NavigateTo("/admin/questions");
+    }
+
+    private void GoToQuizConfig()
+    {
+        Navigation.NavigateTo("/quiz-config");
+    }
+
+    private void EditExam(int examId)
+    {
+        Navigation.NavigateTo($"/admin/editexam/{examId}");
+    }
+}
+
+
+

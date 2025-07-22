@@ -1,0 +1,617 @@
+﻿@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using CSharpQuizBlazor.Models
+@using CSharpQuizBlazor.Data
+@using Microsoft.EntityFrameworkCore
+@using System.Text.Json
+@inject IDbContextFactory<QuizDbContext> DbContextFactory
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+@page "/quiz"
+
+<PageTitle>C# Quiz - Question @(currentQuestion + 1) of @(questions?.Count ?? 0)</PageTitle>
+
+<!-- Keep your existing CSS for hiding navigation -->
+<style>
+    .top-row, .sidebar, .navbar, nav, .nav-item {
+        display: none !important;
+    }
+
+    .page {
+        padding: 0 !important;
+    }
+
+    .content {
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    body {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .main {
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    .timer-warning {
+        animation: pulse 1s infinite;
+    }
+
+    @@keyframes pulse {
+        0% {
+            opacity: 1;
+        }
+
+        50% {
+            opacity: 0.5;
+        }
+
+        100% {
+            opacity: 1;
+        }
+    }
+</style>
+
+<!-- Keep your exact same styling -->
+<div style="max-width: 900px; margin: 0 auto; padding: 20px; font-family: 'Segoe UI', system-ui, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh;">
+    <div style="position: fixed; top: 10px; right: 10px; background: red; color: white; padding: 10px; z-index: 9999; border-radius: 5px;">
+        QUIZ COMPONENT LOADED
+    </div>
+    @if (questions == null || quizSettings == null)
+    {
+        <!-- Keep your existing loading design -->
+        <div style="text-align: center; padding: 80px 40px; background: white; border-radius: 20px; box-shadow: 0 15px 40px rgba(0,0,0,0.1);">
+            <div style="width: 60px; height: 60px; border: 5px solid #e9ecef; border-top: 5px solid #3498db; border-radius: 50%; margin: 0 auto 30px; animation: spin 1.2s linear infinite;"></div>
+            <h4 style="color: #2c3e50; font-size: 1.5rem; margin-bottom: 10px;">Loading Your Quiz...</h4>
+            <p style="color: #7f8c8d; font-size: 1.1rem;">Please wait while we prepare your questions</p>
+        </div>
+    }
+    else if (questions.Count == 0)
+    {
+        <!-- Keep your existing no questions design -->
+        <div style="text-align: center; padding: 80px 40px; background: white; border-radius: 20px; border: 2px solid #fed7d7;">
+            <div style="font-size: 4rem; margin-bottom: 25px;">⚠️</div>
+            <h4 style="color: #e74c3c; font-size: 1.8rem; margin-bottom: 15px;">No Questions Available</h4>
+            <p style="color: #7f8c8d; font-size: 1.1rem; margin-bottom: 30px;">We couldn't find any quiz questions. Please try again later.</p>
+        </div>
+    }
+    else if (currentQuestion >= questions.Count || timeExpired)
+    {
+        <!-- Enhanced results with your existing design -->
+        <div style="text-align: center; padding: 80px 50px; background: linear-gradient(135deg, #8e44ad, #9b59b6); color: white; border-radius: 20px; box-shadow: 0 20px 50px rgba(142, 68, 173, 0.3);">
+            <h4 style="font-size: 3rem; margin-bottom: 25px; font-weight: 700;">
+                @(timeExpired ? "⏰ Time's Up!" : "🎉 Quiz Complete!")
+            </h4>
+            <p style="font-size: 1.6rem; margin-bottom: 35px;">Your final score: @totalScore out of @totalPossibleScore points</p>
+            <p style="font-size: 1.6rem; margin-bottom: 35px;">Percentage: @(((double)totalScore / totalPossibleScore * 100).ToString("F1"))%</p>
+
+            <div style="margin-bottom: 30px;">
+                <h5 style="font-size: 1.4rem; margin-bottom: 20px;">Your Answers Review:</h5>
+                @for (int i = 0; i < questions.Count; i++)
+                {
+                    var question = questions[i];
+                    var userAnswer = userAnswers[i];
+                    var isCorrect = IsAnswerCorrect(question, userAnswer);
+
+                    <div style="background: rgba(255,255,255,0.1); border-radius: 10px; padding: 15px; margin: 10px 0; text-align: left;">
+                        <p style="font-weight: 600; margin-bottom: 8px;">Q@(i + 1): @question.QuestionText</p>
+                        <p style="color: @(isCorrect ? "#2ecc71" : "#e74c3c"); font-weight: 500;">
+                            Your Answer: @GetUserAnswerText(question, userAnswer) @(isCorrect ? "✓" : "✗")
+                        </p>
+                        @if (!isCorrect)
+                        {
+                            <p style="color: #2ecc71; font-weight: 500;">
+                                Correct Answer: @GetCorrectAnswerText(question) ✓
+                            </p>
+                        }
+                    </div>
+                }
+            </div>
+
+            <button @onclick="RestartQuiz" style="background: linear-gradient(135deg, #ff6b6b, #ee5a52); border: none; padding: 18px 40px; font-size: 1.2rem; font-weight: 600; border-radius: 50px; color: white; cursor: pointer; margin-right: 20px;">🔄 Take Quiz Again</button>
+            <button @onclick="GoToConfig" style="background: linear-gradient(135deg, #3498db, #2980b9); border: none; padding: 18px 40px; font-size: 1.2rem; font-weight: 600; border-radius: 50px; color: white; cursor: pointer;">⚙️ New Quiz</button>
+        </div>
+    }
+    else
+    {
+        <!-- Enhanced header with timer -->
+        <div style="text-align: center; margin-bottom: 40px;">
+            <h1 style="color: white; font-size: 2.8rem; font-weight: 700; margin-bottom: 15px; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">@quizSettings.QuizTitle</h1>
+
+            <!-- NEW: Timer Display with your styling -->
+            <div style="background: @(timeRemaining <= 300 ? "linear-gradient(135deg, #e74c3c, #c0392b)" : "linear-gradient(135deg, #2ecc71, #27ae60)"); color: white; padding: 15px 30px; border-radius: 50px; display: inline-block; margin-bottom: 20px; @(timeRemaining <= 300 ? "animation: pulse 1s infinite;" : "")" class="@(timeRemaining <= 300 ? "timer-warning" : "")">
+                <span style="font-size: 1.2rem; font-weight: 600;">⏱️ Time: @FormatTime(timeRemaining)</span>
+            </div>
+
+            <!-- Keep your existing progress bar -->
+            <div style="background: rgba(255,255,255,0.2); border-radius: 25px; height: 12px; margin: 25px 0; overflow: hidden;">
+                <div style="height: 100%; background: linear-gradient(90deg, #2ecc71, #27ae60); border-radius: 25px; width: @(((double)(currentQuestion + 1) / questions.Count) * 100)%; transition: width 0.5s ease;"></div>
+            </div>
+        </div>
+
+        <!-- Keep your existing white card design -->
+        <div style="background: white; border-radius: 20px; box-shadow: 0 15px 40px rgba(0,0,0,0.1); padding: 50px; margin: 40px 0; border: 1px solid #e9ecef;">
+            <!-- Enhanced question header with type -->
+            <p style="color: #7f8c8d; font-size: 1.2rem; font-weight: 600; margin-bottom: 20px;">
+                🎯 Question @(currentQuestion + 1) of @questions.Count (@GetQuestionTypeDisplayName(currentQ.Type))
+            </p>
+            <p style="font-size: 1.5rem; font-weight: 600; color: #2c3e50; margin-bottom: 35px; line-height: 1.5;">@currentQ?.QuestionText</p>
+
+            <!-- Dynamic question rendering based on type -->
+            @if (currentQ.Type == QuestionType.MultipleChoice)
+            {
+                <!-- Keep your existing multiple choice design -->
+                <div style="display: grid; gap: 20px; margin-bottom: 40px;">
+                    @for (int i = 0; i < 4; i++)
+                    {
+                        var optionIndex = i;
+                        var optionText = GetOptionText(optionIndex);
+                        if (!string.IsNullOrEmpty(optionText))
+                        {
+                            <div style="background: @(selectedAnswer == optionIndex ? "linear-gradient(135deg, #3498db, #2980b9)" : "white"); border: 3px solid @(selectedAnswer == optionIndex ? "#3498db" : "#e9ecef"); border-radius: 12px; padding: 25px; cursor: pointer; transition: all 0.3s ease; display: flex; align-items: center; color: @(selectedAnswer == optionIndex ? "white" : "#2c3e50");" @onclick="() => OnAnswerSelected(optionIndex)">
+                                <div style="width: 24px; height: 24px; border: 3px solid @(selectedAnswer == optionIndex ? "white" : "#e9ecef"); border-radius: 50%; margin-right: 20px; position: relative;">
+                                    @if (selectedAnswer == optionIndex)
+                                    {
+                                        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 10px; height: 10px; background: white; border-radius: 50%;"></div>
+                                    }
+                                </div>
+                                <label style="font-size: 1.2rem; font-weight: 500; cursor: pointer; margin: 0;">@optionText</label>
+                            </div>
+                        }
+                    }
+                </div>
+            }
+            else if (currentQ.Type == QuestionType.TrueFalse)
+            {
+                <!-- NEW: True/False with your card style -->
+                <div style="display: grid; gap: 20px; margin-bottom: 40px;">
+                    <div style="background: @(selectedAnswer == 1 ? "linear-gradient(135deg, #2ecc71, #27ae60)" : "white"); border: 3px solid @(selectedAnswer == 1 ? "#2ecc71" : "#e9ecef"); border-radius: 12px; padding: 25px; cursor: pointer; transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; color: @(selectedAnswer == 1 ? "white" : "#2c3e50"); font-size: 1.3rem; font-weight: 600;" @onclick="() => OnAnswerSelected(1)">
+                        ✅ True
+                    </div>
+                    <div style="background: @(selectedAnswer == 0 ? "linear-gradient(135deg, #e74c3c, #c0392b)" : "white"); border: 3px solid @(selectedAnswer == 0 ? "#e74c3c" : "#e9ecef"); border-radius: 12px; padding: 25px; cursor: pointer; transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; color: @(selectedAnswer == 0 ? "white" : "#2c3e50"); font-size: 1.3rem; font-weight: 600;" @onclick="() => OnAnswerSelected(0)">
+                        ❌ False
+                    </div>
+                </div>
+            }
+            else if (currentQ.Type == QuestionType.OneWord)
+            {
+                <!-- NEW: One word input -->
+                <div style="margin-bottom: 40px;">
+                    <input @bind="textAnswer" placeholder="Enter your answer (one word)"
+                           style="width: 100%; padding: 20px; border: 3px solid #e9ecef; border-radius: 12px; font-size: 1.2rem; text-align: center;"
+                           maxlength="50" />
+                </div>
+            }
+            else if (currentQ.Type == QuestionType.ShortAnswer)
+            {
+                <!-- NEW: Short answer textarea -->
+                <div style="margin-bottom: 40px;">
+                    <textarea @bind="textAnswer" placeholder="Enter your short answer (2-3 sentences)"
+                              style="width: 100%; padding: 20px; border: 3px solid #e9ecef; border-radius: 12px; font-size: 1.1rem; min-height: 120px; resize: vertical;"
+                              maxlength="500"></textarea>
+                </div>
+            }
+
+            <!-- Keep your existing button controls -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 40px; gap: 20px;">
+                <button @onclick="GoToPreviousQuestion" disabled="@(currentQuestion == 0)"
+                        style="background: @(currentQuestion == 0 ? "#95a5a6" : "linear-gradient(135deg, #f39c12, #e67e22)"); border: none; padding: 15px 35px; font-size: 1.2rem; font-weight: 600; border-radius: 50px; color: white; cursor: @(currentQuestion == 0 ? "not-allowed" : "pointer"); box-shadow: 0 6px 20px rgba(243, 156, 18, 0.3);">
+                    ← Previous
+                </button>
+
+                <!-- Enhanced score display -->
+                <div style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 18px 30px; border-radius: 50px; box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);">
+                    <span style="font-weight: 500; opacity: 0.9; font-size: 1rem;">Score: </span>
+                    <span style="font-weight: 700; font-size: 1.4rem;">@totalScore/@totalPossibleScore</span>
+                </div>
+
+                <button @onclick="SubmitAnswer" disabled="@(!CanSubmitAnswer())"
+                        style="background: @(!CanSubmitAnswer() ? "#95a5a6" : "linear-gradient(135deg, #e74c3c, #c0392b)"); border: none; padding: 15px 35px; font-size: 1.2rem; font-weight: 600; border-radius: 50px; color: white; cursor: @(!CanSubmitAnswer() ? "not-allowed" : "pointer"); box-shadow: 0 6px 20px rgba(231, 76, 60, 0.3);">
+                    Submit Answer
+                </button>
+
+                <button @onclick="GoToNextQuestion" disabled="@(!answerSubmitted)"
+                        style="background: @(!answerSubmitted ? "#95a5a6" : "linear-gradient(135deg, #27ae60, #2ecc71)"); border: none; padding: 15px 35px; font-size: 1.2rem; font-weight: 600; border-radius: 50px; color: white; cursor: @(!answerSubmitted ? "not-allowed" : "pointer"); box-shadow: 0 6px 20px rgba(39, 174, 96, 0.3);">
+                    @(currentQuestion == questions.Count - 1 ? "Finish Quiz" : "Next") →
+                </button>
+            </div>
+
+            <!-- Keep your existing feedback design -->
+            @if (answerSubmitted && showFeedback)
+            {
+                <div style="margin-top: 30px; padding: 20px; border-radius: 15px; background: @(isCurrentAnswerCorrect ? "linear-gradient(135deg, #2ecc71, #27ae60)" : "linear-gradient(135deg, #e74c3c, #c0392b)"); color: white;">
+                    <h4 style="margin-bottom: 15px; font-size: 1.3rem;">
+                        @(isCurrentAnswerCorrect ? "✅ Correct!" : "❌ Incorrect")
+                    </h4>
+                    @if (!isCurrentAnswerCorrect)
+                    {
+                        <p style="margin: 0; font-size: 1.1rem;">
+                            The correct answer is: <strong>@GetCorrectAnswerText(currentQ)</strong>
+                        </p>
+                    }
+                    <p style="margin: 10px 0 0 0; font-size: 1rem; opacity: 0.9;">
+                        Points earned: @(isCurrentAnswerCorrect? currentQ.Points: 0) / @currentQ.Points
+                    </p>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    // Keep your existing properties and add new ones
+    private List<Question>? questions;
+    private Question? currentQ;
+    private int currentQuestion = 0;
+    private int selectedAnswer = -1;
+    private int score = 0; // Keep for backward compatibility
+    private bool answerSubmitted = false;
+    private bool showFeedback = false;
+    private bool isCurrentAnswerCorrect = false;
+    private List<object> userAnswers = new List<object>();
+
+    // NEW: Enhanced properties
+    private QuizSettings? quizSettings;
+    private string textAnswer = "";
+    private int timeRemaining = 1800; // 30 minutes default
+    private bool timeExpired = false;
+    private Timer? quizTimer;
+    private int totalScore = 0;
+    private int totalPossibleScore = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            Console.WriteLine("=== Quiz component initializing ===");
+            await LoadQuizSettings();
+            Console.WriteLine("=== Settings loaded, loading questions ===");
+            await LoadQuestions();
+            Console.WriteLine("=== Questions loaded, starting timer ===");
+            StartTimer();
+            Console.WriteLine("=== Quiz initialization complete ===");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"=== ERROR in OnInitializedAsync: {ex.Message} ===");
+            Console.WriteLine($"=== Stack trace: {ex.StackTrace} ===");
+        }
+        // Remove these duplicate lines:
+        // await LoadQuizSettings();
+        // await LoadQuestions();
+        // StartTimer();
+    }
+
+
+    private async Task LoadQuizSettings()
+    {
+        try
+        {
+            Console.WriteLine("LoadQuizSettings called");
+            var settingsJson = await JS.InvokeAsync<string>("sessionStorage.getItem", "quizSettings");
+            Console.WriteLine($"Settings JSON: {settingsJson}");
+
+            if (!string.IsNullOrEmpty(settingsJson))
+            {
+                quizSettings = JsonSerializer.Deserialize<QuizSettings>(settingsJson);
+                timeRemaining = quizSettings.TimeLimit * 60;
+                Console.WriteLine($"Loaded settings: {quizSettings.QuizTitle}, Types: {string.Join(",", quizSettings.AllowedTypes)}");
+            }
+            else
+            {
+                Console.WriteLine("No settings found, redirecting to config");
+                Navigation.NavigateTo("/quiz-config");
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading settings: {ex.Message}");
+            Navigation.NavigateTo("/quiz-config");
+            return;
+        }
+    }
+
+
+
+    private async Task LoadQuestions()
+    {
+        try
+        {
+            Console.WriteLine("LoadQuestions called");
+            using var db = await DbContextFactory.CreateDbContextAsync();
+            var allQuestions = await db.Questions.ToListAsync();
+            Console.WriteLine($"Total questions in database: {allQuestions.Count}");
+
+            // Filter by allowed question types
+            var filteredQuestions = allQuestions
+                .Where(q => quizSettings.AllowedTypes.Contains(q.Type))
+                .ToList();
+            Console.WriteLine($"Filtered questions: {filteredQuestions.Count}");
+
+            // IMPORTANT: Adjust requested count if insufficient questions
+            var availableCount = filteredQuestions.Count;
+            var requestedCount = quizSettings.NumberOfQuestions;
+            var actualCount = Math.Min(availableCount, requestedCount);
+
+            Console.WriteLine($"Requested: {requestedCount}, Available: {availableCount}, Using: {actualCount}");
+
+            if (availableCount == 0)
+            {
+                Console.WriteLine("No questions available for selected types!");
+                // Use all question types as fallback
+                filteredQuestions = allQuestions;
+                actualCount = Math.Min(allQuestions.Count, requestedCount);
+            }
+
+            // Randomly select the available number of questions
+            var random = new Random();
+            questions = filteredQuestions
+                .OrderBy(x => random.Next())
+                .Take(actualCount)
+                .ToList();
+
+            Console.WriteLine($"Selected questions: {questions.Count}");
+
+            if (questions != null && questions.Count > 0)
+            {
+                currentQ = questions[currentQuestion];
+                userAnswers = Enumerable.Repeat<object>(null, questions.Count).ToList();
+                totalPossibleScore = questions.Sum(q => q.Points);
+                Console.WriteLine($"Quiz initialized with {questions.Count} questions");
+            }
+            else
+            {
+                Console.WriteLine("No questions loaded!");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading questions: {ex.Message}");
+        }
+    }
+
+
+    private void StartTimer()
+    {
+        quizTimer = new Timer(TimerCallback, null, 1000, 1000);
+    }
+
+    private async void TimerCallback(object state)
+    {
+        timeRemaining--;
+        if (timeRemaining <= 0)
+        {
+            timeExpired = true;
+            quizTimer?.Dispose();
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private string FormatTime(int seconds)
+    {
+        var minutes = seconds / 60;
+        var remainingSeconds = seconds % 60;
+        return $"{minutes:D2}:{remainingSeconds:D2}";
+    }
+
+    private string GetQuestionTypeDisplayName(QuestionType type)
+    {
+        return type switch
+        {
+            QuestionType.MultipleChoice => "Multiple Choice",
+            QuestionType.TrueFalse => "True/False",
+            QuestionType.OneWord => "One Word",
+            QuestionType.ShortAnswer => "Short Answer",
+            _ => type.ToString()
+        };
+    }
+
+    private void OnAnswerSelected(int answer)
+    {
+        if (!answerSubmitted)
+        {
+            selectedAnswer = answer;
+            StateHasChanged();
+        }
+    }
+
+    private bool CanSubmitAnswer()
+    {
+        if (answerSubmitted) return false;
+
+        return currentQ?.Type switch
+        {
+            QuestionType.MultipleChoice => selectedAnswer != -1,
+            QuestionType.TrueFalse => selectedAnswer != -1,
+            QuestionType.OneWord or QuestionType.ShortAnswer => !string.IsNullOrWhiteSpace(textAnswer),
+            _ => false
+        };
+    }
+
+    private void SubmitAnswer()
+    {
+        if (!CanSubmitAnswer()) return;
+
+        // Store the user's answer
+        if (currentQ.Type == QuestionType.MultipleChoice)
+        {
+            userAnswers[currentQuestion] = selectedAnswer;
+            isCurrentAnswerCorrect = selectedAnswer == ((currentQ.CorrectAnswer ?? 1) - 1);
+        }
+        else if (currentQ.Type == QuestionType.TrueFalse)
+        {
+            userAnswers[currentQuestion] = selectedAnswer;
+            isCurrentAnswerCorrect = selectedAnswer == (currentQ.CorrectAnswer ?? 0);
+        }
+        else
+        {
+            userAnswers[currentQuestion] = textAnswer;
+            isCurrentAnswerCorrect = string.Equals(textAnswer.Trim(), currentQ.CorrectTextAnswer?.Trim(), StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (isCurrentAnswerCorrect)
+        {
+            totalScore += currentQ.Points;
+            score++; // Keep for backward compatibility
+        }
+
+        answerSubmitted = true;
+        showFeedback = true;
+        StateHasChanged();
+    }
+
+    private void GoToNextQuestion()
+    {
+        if (!answerSubmitted) return;
+
+        currentQuestion++;
+
+        if (questions != null && currentQuestion < questions.Count)
+        {
+            currentQ = questions[currentQuestion];
+
+            // Restore previous answer if any
+            var previousAnswer = userAnswers[currentQuestion];
+            if (previousAnswer != null)
+            {
+                if (currentQ.Type == QuestionType.MultipleChoice || currentQ.Type == QuestionType.TrueFalse)
+                {
+                    selectedAnswer = (int)previousAnswer;
+                }
+                else
+                {
+                    textAnswer = previousAnswer.ToString() ?? "";
+                }
+                answerSubmitted = true;
+            }
+            else
+            {
+                selectedAnswer = -1;
+                textAnswer = "";
+                answerSubmitted = false;
+            }
+
+            showFeedback = false;
+        }
+
+        StateHasChanged();
+    }
+
+    private void GoToPreviousQuestion()
+    {
+        if (currentQuestion > 0)
+        {
+            currentQuestion--;
+            currentQ = questions[currentQuestion];
+
+            // Restore previous answer
+            var previousAnswer = userAnswers[currentQuestion];
+            if (previousAnswer != null)
+            {
+                if (currentQ.Type == QuestionType.MultipleChoice || currentQ.Type == QuestionType.TrueFalse)
+                {
+                    selectedAnswer = (int)previousAnswer;
+                }
+                else
+                {
+                    textAnswer = previousAnswer.ToString() ?? "";
+                }
+                answerSubmitted = true;
+            }
+            else
+            {
+                selectedAnswer = -1;
+                textAnswer = "";
+                answerSubmitted = false;
+            }
+
+            showFeedback = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RestartQuiz()
+    {
+        quizTimer?.Dispose();
+        await LoadQuizSettings();
+        await LoadQuestions();
+
+        currentQuestion = 0;
+        selectedAnswer = -1;
+        textAnswer = "";
+        answerSubmitted = false;
+        showFeedback = false;
+        isCurrentAnswerCorrect = false;
+        totalScore = 0;
+        score = 0;
+        timeExpired = false;
+
+        StartTimer();
+        StateHasChanged();
+    }
+
+    private void GoToConfig()
+    {
+        quizTimer?.Dispose();
+        Navigation.NavigateTo("/quiz-config");
+    }
+
+    // Helper methods for answer display
+    private string GetOptionText(int index)
+    {
+        return index switch
+        {
+            0 => currentQ?.Option1 ?? "",
+            1 => currentQ?.Option2 ?? "",
+            2 => currentQ?.Option3 ?? "",
+            3 => currentQ?.Option4 ?? "",
+            _ => ""
+        };
+    }
+
+    private string GetCorrectAnswerText(Question question)
+    {
+        return question.Type switch
+        {
+            QuestionType.MultipleChoice => GetOptionText((question.CorrectAnswer ?? 1) - 1),
+            QuestionType.TrueFalse => (question.CorrectAnswer == 1) ? "True" : "False",
+            _ => question.CorrectTextAnswer ?? ""
+        };
+    }
+
+    private string GetUserAnswerText(Question question, object userAnswer)
+    {
+        if (userAnswer == null) return "Not answered";
+
+        return question.Type switch
+        {
+            QuestionType.MultipleChoice => GetOptionText((int)userAnswer),
+            QuestionType.TrueFalse => ((int)userAnswer == 1) ? "True" : "False",
+            _ => userAnswer.ToString() ?? "No answer"
+        };
+    }
+
+    private bool IsAnswerCorrect(Question question, object userAnswer)
+    {
+        if (userAnswer == null) return false;
+
+        return question.Type switch
+        {
+            QuestionType.MultipleChoice => (int)userAnswer == (question.CorrectAnswer - 1),
+            QuestionType.TrueFalse => (int)userAnswer == (question.CorrectAnswer ?? 0),
+
+            _ => string.Equals(userAnswer.ToString()?.Trim(), question.CorrectTextAnswer?.Trim(), StringComparison.OrdinalIgnoreCase)
+        };
+    }
+
+
+    public void Dispose()
+    {
+        quizTimer?.Dispose();
+    }
+}
+
