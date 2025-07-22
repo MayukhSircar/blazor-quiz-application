@@ -1,0 +1,18 @@
+﻿[providers.dotnet]
+version = "8.0"
+
+[phases.setup]
+nixPkgs = ["dotnet-sdk_8"]
+
+[phases.build]
+cmds = [
+    "dotnet restore",
+    "dotnet publish -c Release -o ./publish"
+]
+
+[start]
+cmd = "dotnet ./publish/CSharpQuizBlazor.dll"
+
+[variables]
+ASPNETCORE_ENVIRONMENT = "Production"
+ASPNETCORE_URLS = "http://0.0.0.0:$PORT"
