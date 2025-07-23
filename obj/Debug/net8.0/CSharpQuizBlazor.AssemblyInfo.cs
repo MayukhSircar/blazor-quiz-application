@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("CSharpQuizBlazor")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+4914c90473b5295c12c4b91ff198c9dc3e7b39ff")]
 [assembly: System.Reflection.AssemblyProductAttribute("CSharpQuizBlazor")]
 [assembly: System.Reflection.AssemblyTitleAttribute("CSharpQuizBlazor")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

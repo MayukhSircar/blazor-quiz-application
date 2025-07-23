@@ -167,3 +167,5 @@ C:\Users\ms84956\source\repos\CSharpQuizBlazor\CSharpQuizBlazor\obj\Debug\net8.0
 C:\Users\ms84956\source\repos\CSharpQuizBlazor\CSharpQuizBlazor\obj\Debug\net8.0\CSharpQuizBlazor.pdb
 C:\Users\ms84956\source\repos\CSharpQuizBlazor\CSharpQuizBlazor\obj\Debug\net8.0\CSharpQuizBlazor.genruntimeconfig.cache
 C:\Users\ms84956\source\repos\CSharpQuizBlazor\CSharpQuizBlazor\obj\Debug\net8.0\ref\CSharpQuizBlazor.dll
+C:\Users\ms84956\source\repos\CSharpQuizBlazor\CSharpQuizBlazor\obj\Debug\net8.0\CSharpQuizBlazor.sourcelink.json
+C:\Users\ms84956\source\repos\CSharpQuizBlazor\CSharpQuizBlazor\obj\Debug\net8.0\staticwebassets.upToDateCheck.txt
